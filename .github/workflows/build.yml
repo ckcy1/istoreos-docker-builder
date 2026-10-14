@@ -1,18 +1,18 @@
-name: Build iStoreOS Docker Rootfs # 定义工作流名称，在 GitHub Actions 页面显示
+name: Build iStoreOS Docker Rootfs
 
 on:
-  workflow_dispatch: # 允许你在 GitHub 网页端手动点击按钮来触发编译
+  workflow_dispatch:
 
 jobs:
   build:
-    runs-on: ubuntu-latest # 指定任务运行在 GitHub 提供的最新版 Ubuntu 虚拟机环境中
+    runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Repository # 步骤 1：检出并下载你的仓库源码
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Free Up Disk Space # 步骤 2：释放虚拟机磁盘空间
-        uses: jlumbroso/free-disk-space@main # 清理系统不必要的预装大软件，防止编译时磁盘空间爆满
+      - name: Free Up Disk Space
+        uses: jlumbroso/free-disk-space@main
         with:
           tool-cache: false
           android: false
@@ -20,56 +20,57 @@ jobs:
           rsa: false
           swish: false
 
-      - name: Install Dependencies # 步骤 3：安装编译所需的系统依赖工具和库
+      - name: Install Dependencies
         run: |
           sudo apt update
           sudo apt install -y build-essential libncurses5-dev gawk git gettext libssl-dev xsltproc zlib1g-dev ecj unzip wget curl python3 file rsync aria2 subversion swig time upx-ucl upx
 
-      - name: Download & Extract ImageBuilder # 步骤 4：自动抓取/下载并正确解压 ImageBuilder 到目标目录
+      - name: Download & Extract ImageBuilder
         run: |
-          cd targets/x86_64 # 进入工作目录
-          
-          # 指定官方 ImageBuilder 托管的根目录
+          cd targets/x86_64
           BASE_URL="https://fw.koolcenter.com/iStoreOS/ib/x86_64/"
           echo "Fetching latest ImageBuilder list from $BASE_URL..."
-          
-          # 通过 curl 抓取网页目录，利用正则筛选出最新的 x86_64 架构 .tar.zst 压缩包文件名，并取最后一个
           LATEST_FILE=$(curl -s "$BASE_URL" | grep -oE 'href="([^"]+x86_64[^"]+\.tar\.zst)"' | sed 's/href="//;s/"//' | tail -n 1)
-          
           if [ -z "$LATEST_FILE" ]; then
             echo "Error: Could not automatically detect the latest ImageBuilder. Falling back to default direct link."
             IMAGE_URL="https://fw.koolcenter.com/iStoreOS/ib/x86_64/istoreos-imagebuilder-x86-64.Linux-x86_64.tar.zst"
           else
             IMAGE_URL="${BASE_URL}${LATEST_FILE}"
           fi
-          
           echo "Downloading ImageBuilder from: $IMAGE_URL"
           wget -O imagebuilder.tar.zst "$IMAGE_URL"
-          
-          # 2. 清理可能存在的旧残留文件
-          rm -rf packages/ repositories makefile || true
-          
-          # 3. 解压时去掉外层目录，让所有核心文件（repositories 等）直接平铺在 targets/x86_64/ 下
+          # 只清理旧的 packages 目录，保留 repositories 和 Makefile
+          rm -rf packages/ || true
           tar --zstd -xvf imagebuilder.tar.zst --strip-components=1
-          
-          # 4. 严格自检：检查关键配置文件 repositories 是否存在
-          if [ -f "repositories" ]; then
-            echo "SUCCESS: repositories file found!"
-          else
-            echo "ERROR: repositories file still missing!"
+          # 检查 repositories 文件
+          if [ ! -f "repositories" ]; then
+            echo "ERROR: repositories file missing!"
             ls -la
             exit 1
           fi
 
-      - name: Run Build Script # 步骤 5：执行项目的构建脚本
+      - name: Run Build Script
         run: |
-          # 强制锁定在 x86_64 目录执行编译
           cd targets/x86_64
-          chmod +x build.sh
-          ./build.sh
+          # 直接执行构建和打包，不依赖可能被覆盖的 build.sh
+          make image PACKAGES="$(tr '\n' ' ' < packages.list)" FILES=files
+          echo "=== 编译完成，开始寻找并打包 rootfs ==="
+          ROOTFS_DIR=$(find . -maxdepth 4 -type d -name "root-x86" | head -n 1)
+          if [ -n "$ROOTFS_DIR" ] && [ -d "$ROOTFS_DIR" ]; then
+            echo "找到 rootfs 目录: $ROOTFS_DIR，开始打包..."
+            cd "$ROOTFS_DIR"
+            # 打包到仓库根目录
+            tar -czf "$GITHUB_WORKSPACE/rootfs-x86_64.tar.gz" .
+            echo "成功生成压缩包：$GITHUB_WORKSPACE/rootfs-x86_64.tar.gz"
+          else
+            echo "错误：未找到 root-x86 目录！"
+            ls -la
+            exit 1
+          fi
+          ls -lh "$GITHUB_WORKSPACE/rootfs-x86_64.tar.gz"
 
-      - name: Upload Artifacts # 步骤 6：上传云端编译好的产物
-        uses: actions/upload-artifact@v4 # 使用 GitHub 官方上传动作
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
         with:
-          name: istoreos-rootfs-x86_64 # 在 GitHub Actions 页面下载时显示的压缩包名称
-          path: rootfs-x86_64.tar.gz # 指定要保存的目标文件路径
+          name: istoreos-rootfs-x86_64
+          path: rootfs-x86_64.tar.gz
