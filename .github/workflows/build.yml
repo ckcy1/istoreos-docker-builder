@@ -25,29 +25,41 @@ jobs:
           sudo apt update
           sudo apt install -y build-essential libncurses5-dev gawk git gettext libssl-dev xsltproc zlib1g-dev ecj unzip wget curl python3 file rsync aria2 subversion swig time upx-ucl upx
 
-      - name: Download & Extract Official Latest ImageBuilder # 步骤 4：自动抓取并下载官方最新的 ImageBuilder 镜像生成器
+      - name: Download & Extract ImageBuilder # 步骤 4：自动抓取/下载并正确解压 ImageBuilder 到目标目录
         run: |
-          cd targets/x86_64 # 进入 x86_64 架构的目标文件夹
+          cd targets/x86_64 # 进入工作目录
           
           # 指定官方 ImageBuilder 托管的根目录
           BASE_URL="https://fw.koolcenter.com/iStoreOS/ib/"
           echo "Fetching latest ImageBuilder list from $BASE_URL..."
           
-          # 通过 curl 抓取网页目录，利用正则筛选出最新的 x86_64 架构 .tar.zst 压缩包文件名，并取最后一个（代表最新版）
+          # 通过 curl 抓取网页目录，利用正则筛选出最新的 x86_64 架构 .tar.zst 压缩包文件名，并取最后一个
           LATEST_FILE=$(curl -s "$BASE_URL" | grep -oE 'href="([^"]+x86_64[^"]+\.tar\.zst)"' | sed 's/href="//;s/"//' | tail -n 1)
           
           if [ -z "$LATEST_FILE" ]; then
             echo "Error: Could not automatically detect the latest ImageBuilder. Falling back to default direct link."
-            # 如果自动抓取失败，则使用预设的稳定直链作为后备保障
-            IMAGE_URL="https://fw.koolcenter.com/iStoreOS/ib/x86_64/istoreos-imagebuilder-x86-64.Linux-x86_64.tar.zst"
+            IMAGE_URL="https://fw.koolcenter.com/iStoreOS/ib/istoreos-imagebuilder-x86-64.Linux-x86_64.tar.zst"
           else
-            # 拼接出完整的下载直链
             IMAGE_URL="${BASE_URL}${LATEST_FILE}"
           fi
           
-          echo "Downloading latest ImageBuilder from: $IMAGE_URL"
-          wget -O imagebuilder.tar.zst "$IMAGE_URL" # 下载并重命名为 imagebuilder.tar.zst
-          tar --zstd -xvf imagebuilder.tar.zst --strip-components=1 # 解压 zstd 压缩包并去除外层多余的根目录
+          echo "Downloading ImageBuilder from: $IMAGE_URL"
+          wget -O imagebuilder.tar.zst "$IMAGE_URL"
+          
+          # 2. 清理可能存在的旧残留文件
+          rm -rf packages/ repositories makefile || true
+          
+          # 3. 解压时去掉外层目录，让所有核心文件（repositories 等）直接平铺在 targets/x86_64/ 下
+          tar --zstd -xvf imagebuilder.tar.zst --strip-components=1
+          
+          # 4. 严格自检：检查关键配置文件 repositories 是否存在
+          if [ -f "repositories" ]; then
+            echo "SUCCESS: repositories file found!"
+          else
+            echo "ERROR: repositories file still missing!"
+            ls -la
+            exit 1
+          fi
 
       - name: Run Build Script # 步骤 5：执行项目的构建脚本
         run: |
