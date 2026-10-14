@@ -13,8 +13,8 @@ make image \
 
 echo "=== 编译完成，开始寻找并打包 rootfs ==="
 
-# 2. 自动搜寻 ImageBuilder 生成的 root-x86_64 目录
-ROOTFS_DIR=$(find . -maxdepth 3 -type d -name "root-x86_64" | head -n 1)
+# 2. 自动搜寻 ImageBuilder 生成的 root-x86 目录
+ROOTFS_DIR=$(find . -maxdepth 3 -type d -name "root-x86" | head -n 1)
 
 if [ -n "$ROOTFS_DIR" ] && [ -d "$ROOTFS_DIR" ]; then
   echo "找到 rootfs 目录: $ROOTFS_DIR，开始打包..."
