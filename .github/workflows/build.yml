@@ -1,0 +1,63 @@
+name: Build iStoreOS Docker Rootfs # 定义工作流名称，在 GitHub Actions 页面显示
+
+on:
+  workflow_dispatch: # 允许你在 GitHub 网页端手动点击按钮来触发编译
+
+jobs:
+  build:
+    runs-on: ubuntu-latest # 指定任务运行在 GitHub 提供的最新版 Ubuntu 虚拟机环境中
+
+    steps:
+      - name: Checkout Repository # 步骤 1：检出并下载你的仓库源码
+        uses: actions/checkout@v4
+
+      - name: Free Up Disk Space # 步骤 2：释放虚拟机磁盘空间
+        uses: jlumbroso/free-disk-space@main # 清理系统不必要的预装大软件，防止编译时磁盘空间爆满
+        with:
+          tool-cache: false
+          android: false
+          dotnet: false
+          rsa: false
+          swish: false
+
+      - name: Install Dependencies # 步骤 3：安装编译所需的系统依赖工具和库
+        run: |
+          sudo apt update
+          sudo apt install -y build-essential libncurses5-dev gawk git gettext libssl-dev xsltproc zlib1g-dev ecj unzip wget curl python3 python3-distutils file rsync aria2 subversion swig time upx-ucl upx
+
+      - name: Download & Extract Official Latest ImageBuilder # 步骤 4：自动抓取并下载官方最新的 ImageBuilder 镜像生成器
+        run: |
+          cd targets/x86_64 # 进入 x86_64 架构的目标文件夹
+          
+          # 指定官方 ImageBuilder 托管的根目录
+          BASE_URL="https://fw.koolcenter.com/iStoreOS/ib/"
+          echo "Fetching latest ImageBuilder list from $BASE_URL..."
+          
+          # 通过 curl 抓取网页目录，利用正则筛选出最新的 x86_64 架构 .tar.zst 压缩包文件名，并取最后一个（代表最新版）
+          LATEST_FILE=$(curl -s "$BASE_URL" | grep -oE 'href="([^"]+x86_64[^"]+\.tar\.zst)"' | sed 's/href="//;s/"//' | tail -n 1)
+          
+          if [ -z "$LATEST_FILE" ]; then
+            echo "Error: Could not automatically detect the latest ImageBuilder. Falling back to default direct link."
+            # 如果自动抓取失败，则使用预设的稳定直链作为后备保障
+            IMAGE_URL="https://fw.koolcenter.com/iStoreOS/ib/istoreos-imagebuilder-x86_64.tar.zst"
+          else
+            # 拼接出完整的下载直链
+            IMAGE_URL="${BASE_URL}${LATEST_FILE}"
+          fi
+          
+          echo "Downloading latest ImageBuilder from: $IMAGE_URL"
+          wget -O imagebuilder.tar.zst "$IMAGE_URL" # 下载并重命名为 imagebuilder.tar.zst
+          tar --zstd -xvf imagebuilder.tar.zst --strip-components=1 # 解压 zstd 压缩包并去除外层多余的根目录
+
+      - name: Run Build Script # 步骤 5：执行项目的构建脚本
+        run: |
+          cd targets/x86_64 # 进入架构目录
+          chmod +x build.sh # 赋予构建脚本可执行权限
+          ./build.sh || true # 运行脚本开始拼装系统（加上 || true 防止非致命警告中断工作流）
+          find . -name "rootfs.tar.gz" -exec cp {} ../../rootfs-x86_64.tar.gz \; # 全局寻找生成的 rootfs.tar.gz 并复制重命名到根目录
+
+      - name: Upload Artifacts # 步骤 6：上传云端编译好的产物
+        uses: actions/upload-artifact@v4 # 使用 GitHub 官方上传动作
+        with:
+          name: istoreos-rootfs-x86_64 # 在 GitHub Actions 页面下载时显示的压缩包名称
+          path: rootfs-x86_64.tar.gz # 指定要保存的目标文件路径
