@@ -30,7 +30,7 @@ jobs:
           cd targets/x86_64 # 进入工作目录
           
           # 指定官方 ImageBuilder 托管的根目录
-          BASE_URL="https://fw.koolcenter.com/iStoreOS/ib/"
+          BASE_URL="https://fw.koolcenter.com/iStoreOS/ib/x86_64/"
           echo "Fetching latest ImageBuilder list from $BASE_URL..."
           
           # 通过 curl 抓取网页目录，利用正则筛选出最新的 x86_64 架构 .tar.zst 压缩包文件名，并取最后一个
