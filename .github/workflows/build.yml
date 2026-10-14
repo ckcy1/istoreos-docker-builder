@@ -23,7 +23,7 @@ jobs:
       - name: Install Dependencies # 步骤 3：安装编译所需的系统依赖工具和库
         run: |
           sudo apt update
-          sudo apt install -y build-essential libncurses5-dev gawk git gettext libssl-dev xsltproc zlib1g-dev ecj unzip wget curl python3 python3-distutils file rsync aria2 subversion swig time upx-ucl upx
+          sudo apt install -y build-essential libncurses5-dev gawk git gettext libssl-dev xsltproc zlib1g-dev ecj unzip wget curl python3 file rsync aria2 subversion swig time upx-ucl upx
 
       - name: Download & Extract Official Latest ImageBuilder # 步骤 4：自动抓取并下载官方最新的 ImageBuilder 镜像生成器
         run: |
