@@ -63,10 +63,10 @@ jobs:
 
       - name: Run Build Script # 步骤 5：执行项目的构建脚本
         run: |
-          cd targets/x86_64 # 进入架构目录
-          chmod +x build.sh # 赋予构建脚本可执行权限
-          ./build.sh || true # 运行脚本开始拼装系统（加上 || true 防止非致命警告中断工作流）
-          find . -name "rootfs.tar.gz" -exec cp {} ../../rootfs-x86_64.tar.gz \; # 全局寻找生成的 rootfs.tar.gz 并复制重命名到根目录
+          # 强制锁定在 x86_64 目录执行编译
+          cd targets/x86_64
+          chmod +x build.sh
+          ./build.sh
 
       - name: Upload Artifacts # 步骤 6：上传云端编译好的产物
         uses: actions/upload-artifact@v4 # 使用 GitHub 官方上传动作
