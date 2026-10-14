@@ -39,7 +39,7 @@ jobs:
           if [ -z "$LATEST_FILE" ]; then
             echo "Error: Could not automatically detect the latest ImageBuilder. Falling back to default direct link."
             # 如果自动抓取失败，则使用预设的稳定直链作为后备保障
-            IMAGE_URL="https://fw.koolcenter.com/iStoreOS/ib/istoreos-imagebuilder-x86_64.tar.zst"
+            IMAGE_URL="https://fw.koolcenter.com/iStoreOS/ib/x86_64/istoreos-imagebuilder-x86-64.Linux-x86_64.tar.zst"
           else
             # 拼接出完整的下载直链
             IMAGE_URL="${BASE_URL}${LATEST_FILE}"
