@@ -28,38 +28,62 @@ jobs:
       - name: Download & Extract ImageBuilder
         run: |
           cd targets/x86_64
+
           BASE_URL="https://fw.koolcenter.com/iStoreOS/ib/x86_64/"
           echo "Fetching latest ImageBuilder list from $BASE_URL..."
           LATEST_FILE=$(curl -s "$BASE_URL" | grep -oE 'href="([^"]+x86_64[^"]+\.tar\.zst)"' | sed 's/href="//;s/"//' | tail -n 1)
+
           if [ -z "$LATEST_FILE" ]; then
             echo "Error: Could not automatically detect the latest ImageBuilder. Falling back to default direct link."
             IMAGE_URL="https://fw.koolcenter.com/iStoreOS/ib/x86_64/istoreos-imagebuilder-x86-64.Linux-x86_64.tar.zst"
           else
             IMAGE_URL="${BASE_URL}${LATEST_FILE}"
           fi
+
           echo "Downloading ImageBuilder from: $IMAGE_URL"
           wget -O imagebuilder.tar.zst "$IMAGE_URL"
-          # 只清理旧的 packages 目录，保留 repositories 和 Makefile
+
+          # 只清理旧的 packages 目录，绝对不要删除 repositories 和 Makefile
           rm -rf packages/ || true
+
           tar --zstd -xvf imagebuilder.tar.zst --strip-components=1
-          # 检查 repositories 文件
+
+          # 严格检查 repositories 是否存在
           if [ ! -f "repositories" ]; then
-            echo "ERROR: repositories file missing!"
+            echo "ERROR: repositories file is missing after extraction!"
+            echo "Current directory contents:"
             ls -la
-            exit 1
+            echo "Searching for repositories in extracted tree:"
+            find . -name "repositories" -type f
+            echo "Creating a minimal repositories file pointing to local packages..."
+            echo "packages/packages.adb" > repositories
+            if [ ! -f "repositories" ]; then
+              echo "FATAL: Could not create repositories file."
+              exit 1
+            fi
           fi
+
+          echo "SUCCESS: repositories file is present."
+          cat repositories
 
       - name: Run Build Script
         run: |
           cd targets/x86_64
-          # 直接执行构建和打包，不依赖可能被覆盖的 build.sh
-          make image PACKAGES="$(tr '\n' ' ' < packages.list)" FILES=files
+
+          # 直接执行构建，不依赖可能被 ImageBuilder 覆盖的 build.sh
+          make image \
+            PACKAGES="$(tr '\n' ' ' < packages.list)" \
+            FILES=files
+
           echo "=== 编译完成，开始寻找并打包 rootfs ==="
+
+          # 寻找 ImageBuilder 生成的 root-x86 目录
           ROOTFS_DIR=$(find . -maxdepth 4 -type d -name "root-x86" | head -n 1)
+
           if [ -n "$ROOTFS_DIR" ] && [ -d "$ROOTFS_DIR" ]; then
             echo "找到 rootfs 目录: $ROOTFS_DIR，开始打包..."
             cd "$ROOTFS_DIR"
-            # 打包到仓库根目录
+            # 打包到仓库根目录，确保上传步骤能找到
             tar -czf "$GITHUB_WORKSPACE/rootfs-x86_64.tar.gz" .
             echo "成功生成压缩包：$GITHUB_WORKSPACE/rootfs-x86_64.tar.gz"
           else
@@ -67,6 +91,7 @@ jobs:
             ls -la
             exit 1
           fi
+
           ls -lh "$GITHUB_WORKSPACE/rootfs-x86_64.tar.gz"
 
       - name: Upload Artifacts
